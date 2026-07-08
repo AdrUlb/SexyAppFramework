@@ -12,6 +12,7 @@ set(SOURCES
 		Include/SexyAppFramework/Color.h Source/Color.cpp
 		Include/SexyAppFramework/Common.h Source/Common.cpp
 		Include/SexyAppFramework/CritSect.h Source/CritSect.cpp
+		Include/SexyAppFramework/CursorWidget.h Source/CursorWidget.cpp
 		Include/SexyAppFramework/D3D8Helper.h Source/D3D8Helper.cpp
 		Include/SexyAppFramework/D3DInterface.h Source/D3DInterface.cpp
 		Include/SexyAppFramework/D3DTester.h Source/D3DTester.cpp
@@ -53,6 +54,7 @@ set(SOURCES
 		Include/SexyAppFramework/NativeDisplay.h Source/NativeDisplay.cpp
 		Include/SexyAppFramework/PerfTimer.h Source/PerfTimer.cpp
 		Include/SexyAppFramework/Point.h
+		Include/SexyAppFramework/Profile.h Source/Profile.cpp
 		Include/SexyAppFramework/PropertiesParser.h Source/PropertiesParser.cpp
 		Include/SexyAppFramework/Quantize.h Source/Quantize.cpp
 		Include/SexyAppFramework/Ratio.h Source/Ratio.cpp
@@ -62,6 +64,7 @@ set(SOURCES
 		Include/SexyAppFramework/ScrollbuttonWidget.h Source/ScrollbuttonWidget.cpp
 		Include/SexyAppFramework/ScrollListener.h
 		Include/SexyAppFramework/SEHCatcher.h Source/SEHCatcher.cpp
+		Include/SexyAppFramework/SexyApp.h Source/SexyApp.cpp
 		Include/SexyAppFramework/SexyAppBase.h Source/SexyAppBase.cpp
 		Include/SexyAppFramework/SexyMatrix.h Source/SexyMatrix.cpp
 		Include/SexyAppFramework/SexyVector.h
@@ -74,11 +77,13 @@ set(SOURCES
 		Include/SexyAppFramework/SWTri_DrawTriangle.h Include/SexyAppFramework/SWTri_DrawTriangleInc1.h Include/SexyAppFramework/SWTri_DrawTriangleInc2.h Include/SexyAppFramework/SWTri_GetTexel.h Include/SexyAppFramework/SWTri_Loop.h
 		Include/SexyAppFramework/SWTri_Pixel555.h Include/SexyAppFramework/SWTri_Pixel565.h Include/SexyAppFramework/SWTri_Pixel888.h Include/SexyAppFramework/SWTri_Pixel8888.h Include/SexyAppFramework/SWTri_TexelARGB.h
 		Include/SexyAppFramework/SysFont.h Source/SysFont.cpp
+		Include/SexyAppFramework/TextWidget.h Source/TextWidget.cpp
 		Include/SexyAppFramework/TriVertex.h
 		Include/SexyAppFramework/Widget.h Source/Widget.cpp
 		Include/SexyAppFramework/WidgetContainer.h Source/WidgetContainer.cpp
 		Include/SexyAppFramework/WidgetManager.h Source/WidgetManager.cpp
 		Include/SexyAppFramework/XMLParser.h Source/XMLParser.cpp
+		Include/SexyAppFramework/XMLWriter.h Source/XMLWriter.cpp
 )
 add_library(SexyAppFramework STATIC ${SOURCES})
 target_include_directories(SexyAppFramework PUBLIC Include)
