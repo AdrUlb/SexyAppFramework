@@ -207,7 +207,7 @@ static inline void CollatePerfRecords()
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-static inline void PushPerfRecord(PerfRecord &theRecord)
+static inline void PushPerfRecord(const PerfRecord &theRecord)
 {
 	if(gPerfRecordTop >= (int)gPerfRecordVector.size())
 		gPerfRecordVector.push_back(theRecord);

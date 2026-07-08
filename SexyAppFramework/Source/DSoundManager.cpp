@@ -181,11 +181,9 @@ bool DSoundManager::LoadWAVSound(unsigned int theSfxID, const std::string& theFi
 {		
 	int aDataSize;
 
-	PFILE* fp;
+	PFILE* fp = p_fopen(theFilename.c_str(), "rb");
 
-	fp = p_fopen(theFilename.c_str(), "rb");
-
-	if (fp <= 0)
+	if (!fp)
 		return false;	
 
 	char aChunkType[5];	
@@ -548,11 +546,9 @@ bool DSoundManager::LoadOGGSound(unsigned int theSfxID, const std::string& theFi
 
 bool DSoundManager::LoadAUSound(unsigned int theSfxID, const std::string& theFilename)
 {
-	PFILE* fp;
+	PFILE* fp = p_fopen(theFilename.c_str(), "rb");
 
-	fp = p_fopen(theFilename.c_str(), "rb");	
-
-	if (fp <= 0)
+	if (!fp)
 		return false;	
 
 	char aHeaderId[5];	
@@ -862,10 +858,9 @@ bool DSoundManager::WriteWAV(unsigned int theSfxID, const std::string& theFilena
 	if (mSourceSounds[theSfxID]->Lock(0, aDataSize, &lpvPtr, &dwBytes, NULL, NULL, 0) != DS_OK)
 		return false;
 
-	FILE* fp;
-	fp = fopen(theFilename.c_str(), "wb");
+	FILE* fp = fopen(theFilename.c_str(), "wb");
 
-	if (fp <= 0)
+	if (!fp)
 	{
 		mSourceSounds[theSfxID]->Unlock(lpvPtr, dwBytes, NULL, NULL);
 		return false;

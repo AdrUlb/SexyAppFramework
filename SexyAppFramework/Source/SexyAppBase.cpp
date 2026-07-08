@@ -1101,17 +1101,20 @@ std::string SexyAppBase::GetProductVersion(const std::string& thePath)
 	if (aSize > 0)		
 	{
 		uchar* aVersionBuffer = new uchar[aSize];
-		aGetFileVersionInfoFunc((char*) thePath.c_str(), 0, aSize, aVersionBuffer);	
-		char* aBuffer;	
+		aGetFileVersionInfoFunc((char*) thePath.c_str(), 0, aSize, aVersionBuffer);
+
+		char aSubBlock1[] = R"(\StringFileInfo\040904B0\ProductVersion)";
+		char aSubBlock2[] = R"(\StringFileInfo\040904E4\ProductVersion)";
+		char* aBuffer;
 		if (aVerQueryValueFunc(aVersionBuffer, 
-				  "\\StringFileInfo\\040904B0\\ProductVersion", 
+				  aSubBlock1,
 				  (void**) &aBuffer, 
 				  &aSize))
 		{
 			aProductVersion = aBuffer;
 		}
 		else if (aVerQueryValueFunc(aVersionBuffer, 
-				  "\\StringFileInfo\\040904E4\\ProductVersion", 
+				  aSubBlock2,
 				  (void**) &aBuffer, 
 				  &aSize))
 		{
@@ -1501,7 +1504,8 @@ bool SexyAppBase::RegistryWrite(const std::string& theValueName, ulong theType, 
 	if (aResult != ERROR_SUCCESS)
 	{
 		ulong aDisp;
-		aResult = RegCreateKeyExA(HKEY_CURRENT_USER, aKeyName.c_str(), 0, "Key", REG_OPTION_NON_VOLATILE,
+		char aClass[] = "Key";
+		aResult = RegCreateKeyExA(HKEY_CURRENT_USER, aKeyName.c_str(), 0, aClass, REG_OPTION_NON_VOLATILE,
 			KEY_ALL_ACCESS, NULL, &aGameKey, &aDisp);
 	}
 
