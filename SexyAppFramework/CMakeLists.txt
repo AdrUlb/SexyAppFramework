@@ -32,8 +32,6 @@ set(SOURCES
 		Include/SexyAppFramework/dsoundversion.h
 		Include/SexyAppFramework/EditListener.h
 		Include/SexyAppFramework/Flags.h Source/Flags.cpp
-		Include/SexyAppFramework/FModLoader.h Source/FModLoader.cpp Include/SexyAppFramework/fmod.h
-		Include/SexyAppFramework/FModMusicInterface.h Source/FModMusicInterface.cpp
 		Include/SexyAppFramework/Font.h Source/Font.cpp
 		Include/SexyAppFramework/GENERIC_DrawLineAA.h
 		Include/SexyAppFramework/Graphics.h Source/Graphics.cpp

@@ -143,7 +143,6 @@ public:
 	double					mDemoMusicVolume;
 	double					mDemoSfxVolume;
 	bool					mNoSoundNeeded;
-	bool					mWantFMod;
 	bool					mCmdLineParsed;
 	bool					mSkipSignatureChecks;
 	bool					mStandardWordWrap;

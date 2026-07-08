@@ -3,7 +3,6 @@
 #include <fcntl.h>
 #include "debug.h"
 #include "DSoundInstance.h"
-#include "FModLoader.h"
 #include <math.h>
 #include "PakLib\PakInterface.h"
 
@@ -18,9 +17,8 @@ using namespace Sexy;
 #endif
 
 #define SOUND_FLAGS (DSBCAPS_CTRLPAN | DSBCAPS_CTRLVOLUME |  DSBCAPS_STATIC | DSBCAPS_LOCSOFTWARE | DSBCAPS_GLOBALFOCUS | DSBCAPS_CTRLFREQUENCY)
-DSoundManager::DSoundManager(HWND theHWnd, bool haveFMod)
+DSoundManager::DSoundManager(HWND theHWnd)
 {
-	mHaveFMod = haveFMod;
 	mLastReleaseTick = 0;
 	mPrimaryBuffer = NULL;
 
@@ -48,16 +46,6 @@ DSoundManager::DSoundManager(HWND theHWnd, bool haveFMod)
 
 		if (aDirectSoundCreateFunc != NULL && aDirectSoundCreateFunc(NULL, &mDirectSound, NULL) == DS_OK)
 		{
-			//FSOUND_SetOutput(FSOUND_OUTPUT_WINMM);
-			if (mHaveFMod)
-			{
-				LoadFModDLL();
-
-				gFMod->FSOUND_SetHWND(theHWnd);
-				gFMod->FSOUND_SetBufferSize(200); // #LUC
-				gFMod->FSOUND_Init(44100, 64, FSOUND_INIT_GLOBALFOCUS);	
-			}
-
 			HRESULT aResult = mDirectSound->SetCooperativeLevel(theHWnd,DSSCL_PRIORITY);
 			if (SUCCEEDED(aResult))
 			{
@@ -111,15 +99,7 @@ DSoundManager::~DSoundManager()
 		mPrimaryBuffer->Release();
 
 	if (mDirectSound != NULL)
-	{
-		if (mHaveFMod)
-			gFMod->FSOUND_Close();
-	
 		mDirectSound->Release();
-
-		if (mHaveFMod)
-			FreeFModDLL();
-	}
 }
 
 int	DSoundManager::FindFreeChannel()
@@ -317,131 +297,6 @@ bool DSoundManager::LoadWAVSound(unsigned int theSfxID, const std::string& theFi
 	}
 	
 	return false;
-}
-
-// Load FMod sound can handle oggs and mp3s and whatever else fmod can decode
-bool DSoundManager::LoadFModSound(unsigned int theSfxID, const std::string& theFilename)
-{
-	if (!mHaveFMod)
-		return false;
-
-	FSOUND_SAMPLE* aSample = gFMod->FSOUND_Sample_Load(FSOUND_FREE, theFilename.c_str(), 0, 0);
-
-	if (aSample == NULL) 
-	{
-		return false;	
-	}
-	
-	int aMode = gFMod->FSOUND_Sample_GetMode(aSample);	
-	int aFreq;
-	gFMod->FSOUND_Sample_GetDefaults(aSample, &aFreq, NULL, NULL, NULL);
-
-	PCMWAVEFORMAT aWaveFormat;
-	DSBUFFERDESC aBufferDesc;    			
-
-	// Set up wave format structure.
-	memset(&aWaveFormat, 0, sizeof(PCMWAVEFORMAT));
-	aWaveFormat.wf.wFormatTag = WAVE_FORMAT_PCM;
-	aWaveFormat.wf.nChannels = ((aMode & FSOUND_MONO) != 0) ? 1 : 2;
-	aWaveFormat.wf.nSamplesPerSec = aFreq;
-	aWaveFormat.wBitsPerSample = ((aMode & FSOUND_8BITS) != 0) ? 8 : 16;
-	aWaveFormat.wf.nBlockAlign = aWaveFormat.wf.nChannels*aWaveFormat.wBitsPerSample/8;
-	aWaveFormat.wf.nAvgBytesPerSec = aWaveFormat.wf.nSamplesPerSec * aWaveFormat.wf.nBlockAlign;	
-
-/*
-	WAVEFORMATEX rigWave;
-
-	rigWave.cbSize=sizeof(rigWave);
-	rigWave.nAvgBytesPerSec=aWaveFormat.wf.nAvgBytesPerSec;
-	rigWave.nBlockAlign=aWaveFormat.wf.nBlockAlign;
-	rigWave.nChannels=aWaveFormat.wf.nChannels;
-	rigWave.nSamplesPerSec=aWaveFormat.wf.nSamplesPerSec;
-	rigWave.wBitsPerSample=aWaveFormat.wBitsPerSample;
-	rigWave.wFormatTag=aWaveFormat.wf.wFormatTag;
-*/
-
-	// Set up DSBUFFERDESC structure.
-
-	int aLenBytes = gFMod->FSOUND_Sample_GetLength(aSample) * aWaveFormat.wf.nBlockAlign;	
-	memset(&aBufferDesc, 0, sizeof(DSBUFFERDESC)); // Zero it out.
-
-	mSourceDataSizes[theSfxID] = aLenBytes;
-	
-	//FUNK
-	aBufferDesc.dwSize = sizeof(DSBUFFERDESC);
-	aBufferDesc.dwFlags = SOUND_FLAGS;
-	aBufferDesc.dwBufferBytes = aLenBytes;
-	aBufferDesc.lpwfxFormat =(LPWAVEFORMATEX)&aWaveFormat;	
-
-	if (mDirectSound->CreateSoundBuffer(&aBufferDesc, &mSourceSounds[theSfxID], NULL) != DS_OK)
-	{
-/*
-char xmsg[100];
-sprintf(xmsg,	"WAV STUFF: (%s)\n"
-				"nAvgBytesPerSec: %d\n"
-				"nBlockAlign: %d\n"
-				"nChannels: %d\n"
-				"nSamplesPerSec: %d\n"
-				"wBitsPerSample: %d\n"
-				"wFormatTag: %d\n",
-
-				theFilename.c_str(),
-				aWaveFormat.wf.nAvgBytesPerSec,
-				aWaveFormat.wf.nBlockAlign,
-				aWaveFormat.wf.nChannels,
-				aWaveFormat.wf.nSamplesPerSec,
-				aWaveFormat.wBitsPerSample,
-				aWaveFormat.wf.wFormatTag);
-
-MessageBox(0,xmsg,xmsg,MB_OK);
-
-HRESULT error=mDirectSound->CreateSoundBuffer(&aBufferDesc, &mSourceSounds[theSfxID], NULL);
-switch (error)
-{
-case DSERR_ALLOCATED:MessageBox(0,"DSERR_ALLOCATED","Ugh",MB_OK);break;
-case DSERR_BADFORMAT:MessageBox(0,"DSERR_BADFORMAT","Ugh",MB_OK);break;
-case DSERR_INVALIDPARAM:MessageBox(0,"DSERR_INVALIDPARAM(XXX)","Ugh",MB_OK);break;
-case DSERR_NOAGGREGATION:MessageBox(0,"DSERR_NOAGGREGATION","Ugh",MB_OK);break;
-case DSERR_OUTOFMEMORY:MessageBox(0,"DSERR_OUTOFMEMORY","Ugh",MB_OK);break;
-case DSERR_UNINITIALIZED:MessageBox(0,"DSERR_UNINITIALIZED","Ugh",MB_OK);break;
-case DSERR_UNSUPPORTED:MessageBox(0,"DSERR_UNSUPPORTED","Ugh",MB_OK);break;
-}
-
-
-exit(0);
-*/
-		// Delete
-		gFMod->FSOUND_Sample_Free(aSample);
-		return false;
-	}
-
-	void* lpvPtr;
-	DWORD dwBytes;
-	if (mSourceSounds[theSfxID]->Lock(0, aLenBytes, &lpvPtr, &dwBytes, NULL, NULL, 0) == DS_OK)
-	{		
-
-		void* aPtr1;
-		void* aPtr2;
-		uint aLen1;
-		uint aLen2;
-
-		if (gFMod->FSOUND_Sample_Lock(aSample, 0, aLenBytes, &aPtr1, &aPtr2, &aLen1, &aLen2))
-		{			
-			memcpy(lpvPtr, aPtr1, aLen1);
-
-			mSourceSounds[theSfxID]->Unlock(lpvPtr, dwBytes, NULL, NULL);
-			gFMod->FSOUND_Sample_Unlock(aSample, aPtr1, aPtr2, aLen1, aLen2);
-		}
-	}
-	else
-	{
-	}
-
-	mSourceSounds[theSfxID]->Unlock(lpvPtr, dwBytes, NULL, 0);
-
-	gFMod->FSOUND_Sample_Free(aSample);
-
-	return true;
 }
 
 #ifdef USE_OGG_LIB
@@ -729,22 +584,6 @@ bool DSoundManager::LoadSound(unsigned int theSfxID, const std::string& theFilen
 	if (LoadWAVSound(theSfxID, aFilename + ".wav"))	
 		return true;
 
-	if (mHaveFMod)
-	{
-		if (LoadFModSound(theSfxID, aFilename + ".mp3"))
-		{
-			WriteWAV(theSfxID, aCachedName, aFilename + ".mp3");
-			return true;
-		}
-#ifndef USE_OGG_LIB
-		if (LoadFModSound(theSfxID, aFilename + ".ogg"))
-		{		
-			WriteWAV(theSfxID, aCachedName, aFilename + ".ogg");
-			return true;
-		}
-#endif
-	}
-	
 #ifdef USE_OGG_LIB
 	if (LoadOGGSound(theSfxID, aFilename + ".ogg"))
 	{		

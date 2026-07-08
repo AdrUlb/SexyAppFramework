@@ -29,7 +29,6 @@ protected:
 	int						FindFreeChannel();
 	int						VolumeToDB(double theVolume);
 	bool					LoadOGGSound(unsigned int theSfxID, const std::string& theFilename);
-	bool					LoadFModSound(unsigned int theSfxID, const std::string& theFilename);
 	bool					LoadWAVSound(unsigned int theSfxID, const std::string& theFilename);
 	bool					LoadAUSound(unsigned int theSfxID, const std::string& theFilename);
 	bool					WriteWAV(unsigned int theSfxID, const std::string& theFilename, const std::string& theDepFile);
@@ -38,9 +37,8 @@ protected:
 
 public:
 	LPDIRECTSOUND			mDirectSound;
-	bool					mHaveFMod;
 
-	DSoundManager(HWND theHWnd, bool haveFMod);
+	DSoundManager(HWND theHWnd);
 	virtual ~DSoundManager();
 
 	virtual bool			Initialized();
