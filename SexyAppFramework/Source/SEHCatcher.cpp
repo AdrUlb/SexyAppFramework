@@ -1,4 +1,5 @@
 #include "SEHCatcher.h"
+
 #include "SexyAppBase.h"
 #include <fstream>
 #include <process.h>
@@ -6,6 +7,12 @@
 #ifdef ZYLOM
 #include "zylomso.h"
 using namespace zylom::zylomso;
+#endif
+
+#ifdef _WIN64
+#define IMAGE_FILE_MACHINE IMAGE_FILE_MACHINE_AMD64
+#else
+#define IMAGE_FILE_MACHINE IMAGE_FILE_MACHINE_I386
 #endif
 
 using namespace Sexy;
@@ -29,10 +36,17 @@ SYMINITIALIZEPROC			SEHCatcher::mSymInitialize = NULL;
 SYMSETOPTIONSPROC			SEHCatcher::mSymSetOptions = NULL;
 UNDECORATESYMBOLNAMEPROC	SEHCatcher::mUnDecorateSymbolName = NULL;
 SYMCLEANUPPROC				SEHCatcher::mSymCleanup = NULL;
+#if defined(_WIN64)
+STACKWALK64PROC					SEHCatcher::mStackWalk = NULL;
+SYMFUNCTIONTABLEACCESS64PROC	SEHCatcher::mSymFunctionTableAccess = NULL;
+SYMGETMODULEBASE64PROC			SEHCatcher::mSymGetModuleBase = NULL;
+SYMFROMADDRPROC					SEHCatcher::mSymGetSymFromAddr = NULL;
+#else
 STACKWALKPROC				SEHCatcher::mStackWalk = NULL;
 SYMFUNCTIONTABLEACCESSPROC	SEHCatcher::mSymFunctionTableAccess = NULL;
 SYMGETMODULEBASEPROC		SEHCatcher::mSymGetModuleBase = NULL;
 SYMGETSYMFROMADDRPROC		SEHCatcher::mSymGetSymFromAddr = NULL;
+#endif
 HTTPTransfer				SEHCatcher::mSubmitReportTransfer;
 bool						SEHCatcher::mExiting = false;
 bool						SEHCatcher::mShowUI = true;
@@ -45,7 +59,7 @@ std::wstring					SEHCatcher::mSubmitErrorMessage = L"Failed to connect to server
 
 static bool gUseDefaultFonts = true;
 
-struct 
+struct
 {
     DWORD   dwExceptionCode;
     char    *szMessage;
@@ -83,32 +97,32 @@ struct
 };
 
 
-SEHCatcher::SEHCatcher() 
-{ 	
-	mPreviousFilter = SetUnhandledExceptionFilter(UnhandledExceptionFilter); 	
+SEHCatcher::SEHCatcher()
+{
+	mPreviousFilter = SetUnhandledExceptionFilter(UnhandledExceptionFilter);
 }
 
-SEHCatcher::~SEHCatcher() 
-{ 
-	SetUnhandledExceptionFilter(mPreviousFilter); 
+SEHCatcher::~SEHCatcher()
+{
+	SetUnhandledExceptionFilter(mPreviousFilter);
 }
 
 long __stdcall SEHCatcher::UnhandledExceptionFilter(LPEXCEPTION_POINTERS lpExceptPtr)
 {
 	if (mApp != NULL)
-		mApp->SEHOccured();	
+		mApp->SEHOccured();
 
 	DoHandleDebugEvent(lpExceptPtr);
-	
+
 	if (!mDebugError)
 		SetErrorMode(SEM_NOGPFAULTERRORBOX);
-	
-	return EXCEPTION_CONTINUE_SEARCH;	
+
+	return EXCEPTION_CONTINUE_SEARCH;
 }
 
 bool SEHCatcher::LoadImageHelp()
 {
-	mImageHelpLib = LoadLibraryA("IMAGEHLP.DLL");
+	mImageHelpLib = LoadLibraryA("DBGHELP.DLL");
     if (!mImageHelpLib)
         return false;
 
@@ -128,6 +142,23 @@ bool SEHCatcher::LoadImageHelp()
     if (!mUnDecorateSymbolName)
         return false;
 
+#if defined(_WIN64)
+	mStackWalk = (STACKWALK64PROC) GetProcAddress(mImageHelpLib, "StackWalk64");
+	if (!mStackWalk)
+		return false;
+
+	mSymFunctionTableAccess = (SYMFUNCTIONTABLEACCESS64PROC) GetProcAddress(mImageHelpLib, "SymFunctionTableAccess64");
+	if (!mSymFunctionTableAccess)
+		return false;
+
+	mSymGetModuleBase = (SYMGETMODULEBASE64PROC) GetProcAddress(mImageHelpLib, "SymGetModuleBase64");
+	if (!mSymGetModuleBase)
+		return false;
+
+	mSymGetSymFromAddr = (SYMFROMADDRPROC) GetProcAddress(mImageHelpLib, "SymFromAddr" );
+	if (!mSymGetSymFromAddr)
+		return false;
+#else
     mStackWalk = (STACKWALKPROC) GetProcAddress(mImageHelpLib, "StackWalk");
     if (!mStackWalk)
         return false;
@@ -142,14 +173,15 @@ bool SEHCatcher::LoadImageHelp()
 
     mSymGetSymFromAddr = (SYMGETSYMFROMADDRPROC) GetProcAddress(mImageHelpLib, "SymGetSymFromAddr" );
     if (!mSymGetSymFromAddr)
-        return false;    
+        return false;
+#endif
 
 	mSymSetOptions(SYMOPT_DEFERRED_LOADS);
 
 	// Get image filename of the main executable
 	char filepath[MAX_PATH], *lastdir, *pPath;
 	DWORD filepathlen = GetModuleFileNameA ( NULL, filepath, sizeof(filepath));
-        
+
     lastdir = strrchr (filepath, '/');
     if (lastdir == NULL) lastdir = strrchr (filepath, '\\');
     if (lastdir != NULL) lastdir[0] = '\0';
@@ -171,7 +203,7 @@ void SEHCatcher::UnloadImageHelp()
 }
 
 static bool StrToLongHex(const std::string& aString, DWORD* theValue)
-{	
+{
 	*theValue = 0;
 
 	for (int i = 0; i < (int)aString.length(); i++)
@@ -255,7 +287,7 @@ void SEHCatcher::GetSymbolsFromMapFile(std::string &theDebugDump)
 			aCurLinesFile = aString.substr(aStartPos + 1, aSegmentPos - aStartPos - 1);
 		}
 		else if ((aCurLinesFile.length() > 0) && (aString.length() == 80))
-		{	
+		{
 			// Line number stuff
 
 			for (int i = 0; i < 4; i++)
@@ -306,8 +338,8 @@ void SEHCatcher::GetSymbolsFromMapFile(std::string &theDebugDump)
 
 					char aSymbolName[4096];
 
-					if (mUnDecorateSymbolName(aBestName.c_str(), aSymbolName, 4096, 
-						UNDNAME_NO_ALLOCATION_MODEL | UNDNAME_NO_ACCESS_SPECIFIERS | 
+					if (mUnDecorateSymbolName(aBestName.c_str(), aSymbolName, 4096,
+						UNDNAME_NO_ALLOCATION_MODEL | UNDNAME_NO_ACCESS_SPECIFIERS |
 						UNDNAME_NO_THROW_SIGNATURES | UNDNAME_NO_MEMBER_TYPE) == 0)
 						strcpy(aSymbolName, aBestName.c_str());
 
@@ -323,7 +355,7 @@ void SEHCatcher::GetSymbolsFromMapFile(std::string &theDebugDump)
 						--aLineNumItr;
 
 					if (aLineNumItr!=aLineNumMap.end() && aLineNumItr->first.first==aFindPreVal)
-					{							
+					{
 						std::string &aBestFile = aLineNumItr->second.first;
 						int aBestLine = aLineNumItr->second.second;
 						int aBestLineDist =  aFindPostVal - aLineNumItr->first.second;
@@ -351,69 +383,83 @@ void SEHCatcher::DoHandleDebugEvent(LPEXCEPTION_POINTERS lpEP)
 	std::string aDebugDump;
 
 	char aBuffer[2048];
-   
+
     ///////////////////////////
-	// first name the exception	
+	// first name the exception
 	char  *szName = NULL;
-    for (int i=0; gMsgTable[i].dwExceptionCode != 0xFFFFFFFF; i++) 
+    for (int i=0; gMsgTable[i].dwExceptionCode != 0xFFFFFFFF; i++)
 	{
-        if (gMsgTable[i].dwExceptionCode == lpEP->ExceptionRecord->ExceptionCode) 
+        if (gMsgTable[i].dwExceptionCode == lpEP->ExceptionRecord->ExceptionCode)
 		{
             szName = gMsgTable[i].szMessage;
             break;
         }
-    }	
+    }
 
     if (szName != NULL)
-	{		
-		sprintf(aBuffer,"Exception: %s (code 0x%x) at address %08X in thread %X\r\n",
-				szName, lpEP->ExceptionRecord->ExceptionCode, 
+	{
+		sprintf(aBuffer,"Exception: %s (code 0x%lx) at address %p in thread %X\r\n",
+				szName, lpEP->ExceptionRecord->ExceptionCode,
 				lpEP->ExceptionRecord->ExceptionAddress, GetCurrentThreadId());
 	}
 	else
 	{
-		sprintf(aBuffer,"Unknown exception: (code 0x%x) at address %08X in thread %X\r\n",
-				lpEP->ExceptionRecord->ExceptionCode, 
+		sprintf(aBuffer,"Unknown exception: (code 0x%lx) at address %p in thread %X\r\n",
+				lpEP->ExceptionRecord->ExceptionCode,
 				lpEP->ExceptionRecord->ExceptionAddress, GetCurrentThreadId());
 	}
 
-	aDebugDump += aBuffer;	
+	aDebugDump += aBuffer;
 
 	///////////////////////////////////////////////////////////
 	// Get logical address of the module where exception occurs
 	DWORD section, offset;
 	GetLogicalAddress(lpEP->ExceptionRecord->ExceptionAddress, aBuffer, sizeof(aBuffer), section, offset);
-	aDebugDump += "Module: " + GetFilename(aBuffer) + "\r\n";		
+	aDebugDump += "Module: " + GetFilename(aBuffer) + "\r\n";
 	sprintf(aBuffer, "Logical Address: %04X:%08X\r\n", section, offset);
-	aDebugDump += aBuffer;	
-	
-	aDebugDump += "\r\n";	
+	aDebugDump += aBuffer;
+
+	aDebugDump += "\r\n";
 
 	anErrorTitle = StrFormat("Exception at %04X:%08X", section, offset);
 
-	std::string aWalkString;	
+	std::string aWalkString;
 
 	if (hasImageHelp)
 		aWalkString = ImageHelpWalk(lpEP->ContextRecord, 0);
 
+/*
 	if (aWalkString.length() == 0)
 		aWalkString = IntelWalk(lpEP->ContextRecord, 0);
+*/
 
     aDebugDump += aWalkString;
 
+#if defined(_WIN64)
 	aDebugDump += "\r\n";
-	sprintf(aBuffer, ("EAX:%08X EBX:%08X ECX:%08X EDX:%08X ESI:%08X EDI:%08X\r\n"),
-            lpEP->ContextRecord->Eax, lpEP->ContextRecord->Ebx, lpEP->ContextRecord->Ecx, lpEP->ContextRecord->Edx, lpEP->ContextRecord->Esi, lpEP->ContextRecord->Edi);
+	sprintf(aBuffer, ("RAX:%016llX RBX:%016llX RCX:%016llX RDX:%016llX RSI:%016llX RDI:%016llX\r\n"), lpEP->ContextRecord->Rax, lpEP->ContextRecord->Rbx, lpEP->ContextRecord->Rcx, lpEP->ContextRecord->Rdx, lpEP->ContextRecord->Rsi, lpEP->ContextRecord->Rdi);
 	aDebugDump += aBuffer;
-    sprintf(aBuffer, "EIP:%08X ESP:%08X  EBP:%08X\r\n", lpEP->ContextRecord->Eip, lpEP->ContextRecord->Esp, lpEP->ContextRecord->Ebp);	
+	sprintf(aBuffer, (" R8:%016llX  R9:%016llX R10:%016llX R11:%016llX R12:%016llX R13:%016llX R14:%016llX R15:%016llX\r\n"), lpEP->ContextRecord->R8, lpEP->ContextRecord->R9, lpEP->ContextRecord->R10, lpEP->ContextRecord->R11, lpEP->ContextRecord->R12, lpEP->ContextRecord->R13, lpEP->ContextRecord->R14, lpEP->ContextRecord->R15);
 	aDebugDump += aBuffer;
-    sprintf(aBuffer, "CS:%04X SS:%04X DS:%04X ES:%04X FS:%04X GS:%04X\r\n", lpEP->ContextRecord->SegCs, lpEP->ContextRecord->SegSs, lpEP->ContextRecord->SegDs, lpEP->ContextRecord->SegEs, lpEP->ContextRecord->SegFs, lpEP->ContextRecord->SegGs );
+	sprintf(aBuffer, "RIP:%016llX RSP:%016llX RBP:%016llX\r\n", lpEP->ContextRecord->Rip, lpEP->ContextRecord->Rsp, lpEP->ContextRecord->Rbp);
 	aDebugDump += aBuffer;
-    sprintf(aBuffer, "Flags:%08X\r\n", lpEP->ContextRecord->EFlags );
+	sprintf(aBuffer, "CS:%04X SS:%04X DS:%04X ES:%04X FS:%04X GS:%04X\r\n", lpEP->ContextRecord->SegCs, lpEP->ContextRecord->SegSs, lpEP->ContextRecord->SegDs, lpEP->ContextRecord->SegEs, lpEP->ContextRecord->SegFs, lpEP->ContextRecord->SegGs);
+	aDebugDump += aBuffer;
+#else
+	aDebugDump += "\r\n";
+	sprintf(aBuffer, ("EAX:%08lX EBX:%08lX ECX:%08lX EDX:%08lX ESI:%08lX EDI:%08lX\r\n"), lpEP->ContextRecord->Eax, lpEP->ContextRecord->Ebx, lpEP->ContextRecord->Ecx, lpEP->ContextRecord->Edx, lpEP->ContextRecord->Esi, lpEP->ContextRecord->Edi);
+	aDebugDump += aBuffer;
+    sprintf(aBuffer, "EIP:%08lX ESP:%08lX EBP:%08lX\r\n", lpEP->ContextRecord->Eip, lpEP->ContextRecord->Esp, lpEP->ContextRecord->Ebp);
+	aDebugDump += aBuffer;
+    sprintf(aBuffer, "CS:%04lX SS:%04lX DS:%04lX ES:%04lX FS:%04lX GS:%04lX\r\n", lpEP->ContextRecord->SegCs, lpEP->ContextRecord->SegSs, lpEP->ContextRecord->SegDs, lpEP->ContextRecord->SegEs, lpEP->ContextRecord->SegFs, lpEP->ContextRecord->SegGs);
+	aDebugDump += aBuffer;
+#endif
+
+    sprintf(aBuffer, "Flags:%08lX\r\n", lpEP->ContextRecord->EFlags);
 	aDebugDump += aBuffer;
 
 	aDebugDump += "\r\n";
-	aDebugDump += GetSysInfo();	
+	aDebugDump += GetSysInfo();
 
     if (mApp != NULL)
 	{
@@ -425,7 +471,7 @@ void SEHCatcher::DoHandleDebugEvent(LPEXCEPTION_POINTERS lpEP)
 		}
 
 		mApp->CopyToClipboard(aDebugDump);
-	}		
+	}
 
     // just for any case
     // some time we can't go through GetSymbolsFromMapFile, probably because of some memory corruption
@@ -433,7 +479,7 @@ void SEHCatcher::DoHandleDebugEvent(LPEXCEPTION_POINTERS lpEP)
 
 	if (hasImageHelp)
 		GetSymbolsFromMapFile(aDebugDump);
-    
+
     // rewrite crash file
 	WriteToFile(aDebugDump);
 
@@ -449,9 +495,9 @@ void SEHCatcher::DoHandleDebugEvent(LPEXCEPTION_POINTERS lpEP)
 			mApp->WriteDemoTimingBlock();
 			mApp->mDemoBuffer.WriteNumBits(0, 1);
 			mApp->mDemoBuffer.WriteNumBits(DEMO_IDLE, 5);
-			mApp->WriteDemoBuffer();		
+			mApp->WriteDemoBuffer();
 			mUploadFileName = mApp->mDemoFileName;
-		}	
+		}
 
 		mHasDemoFile = mApp->mRecordingDemoBuffer;
 		std::string anUploadFile = mApp->NotifyCrashHook();
@@ -469,11 +515,12 @@ void SEHCatcher::DoHandleDebugEvent(LPEXCEPTION_POINTERS lpEP)
 		ShowErrorDialog(anErrorTitle, aDebugDump);
 #endif
 
-	//::MessageBox(NULL, aDebugDump.c_str(), "ERROR", MB_ICONERROR);	
+	//::MessageBox(NULL, aDebugDump.c_str(), "ERROR", MB_ICONERROR);
 
-	UnloadImageHelp();	
+	UnloadImageHelp();
 }
 
+/*
 std::string SEHCatcher::IntelWalk(PCONTEXT theContext, int theSkipCount)
 {
 	std::string aDebugDump;
@@ -481,7 +528,7 @@ std::string SEHCatcher::IntelWalk(PCONTEXT theContext, int theSkipCount)
 
 	DWORD pc = theContext->Eip;
     PDWORD pFrame, pPrevFrame;
-    
+
     pFrame = (PDWORD)theContext->Ebp;
 
     for (;;)
@@ -507,13 +554,14 @@ std::string SEHCatcher::IntelWalk(PCONTEXT theContext, int theSkipCount)
         if (pFrame <= pPrevFrame)
             break;
 
-        // Can two DWORDs be read from the supposed frame address?          
+        // Can two DWORDs be read from the supposed frame address?
         if (IsBadWritePtr(pFrame, sizeof(PVOID)*2))
             break;
     };
 
 	return aDebugDump;
 }
+*/
 
 std::string SEHCatcher::ImageHelpWalk(PCONTEXT theContext, int theSkipCount)
 {
@@ -521,23 +569,29 @@ std::string SEHCatcher::ImageHelpWalk(PCONTEXT theContext, int theSkipCount)
 	std::string aDebugDump;
 
 	STACKFRAME sf;
-	memset( &sf, 0, sizeof(sf) );	
+	memset( &sf, 0, sizeof(sf) );
 
 	// Initialize the STACKFRAME structure for the first call.  This is only
 	// necessary for Intel CPUs, and isn't mentioned in the documentation.
+#if defined(_WIN64)
+	sf.AddrPC.Offset       = theContext->Rip;
+	sf.AddrStack.Offset    = theContext->Rsp;
+	sf.AddrFrame.Offset    = theContext->Rbp;
+#else
 	sf.AddrPC.Offset       = theContext->Eip;
-	sf.AddrPC.Mode         = AddrModeFlat;
 	sf.AddrStack.Offset    = theContext->Esp;
-	sf.AddrStack.Mode      = AddrModeFlat;
 	sf.AddrFrame.Offset    = theContext->Ebp;
+#endif
+
+	sf.AddrPC.Mode         = AddrModeFlat;
+	sf.AddrStack.Mode      = AddrModeFlat;
 	sf.AddrFrame.Mode      = AddrModeFlat;
-	
+
 	int aLevelCount = 0;
 
 	for (;;)
 	{
-		if (!mStackWalk(IMAGE_FILE_MACHINE_I386, GetCurrentProcess(), GetCurrentThread(),
-						&sf, NULL  /*theContext*/, NULL, mSymFunctionTableAccess, mSymGetModuleBase, 0))
+		if (!mStackWalk(IMAGE_FILE_MACHINE, GetCurrentProcess(), GetCurrentThread(), &sf, theContext, NULL, mSymFunctionTableAccess, mSymGetModuleBase, 0))
 		{
 			DWORD lastErr = GetLastError();
 			sprintf(aBuffer, "StackWalk failed (error %d)\r\n", lastErr);
@@ -554,43 +608,61 @@ std::string SEHCatcher::ImageHelpWalk(PCONTEXT theContext, int theSkipCount)
 			continue;
 		}
 
+#if defined(_WIN64)
+		BYTE symbolBuffer[sizeof(SYMBOL_INFO) + 512];
+		PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)symbolBuffer;
+		pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+		pSymbol->MaxNameLen = 512;
+
+		DWORD64 symDisplacement = 0;
+
+		if (mSymGetSymFromAddr(GetCurrentProcess(), sf.AddrPC.Offset, &symDisplacement, pSymbol))
+		{
+			sprintf(aBuffer, "%llX %llX %s+0x%llX\r\n", sf.AddrFrame.Offset, sf.AddrPC.Offset, pSymbol->Name, symDisplacement);
+		}
+		aDebugDump += aBuffer;
+		sprintf(aBuffer, "Params: %08llX %08llX %08llX %08llX\r\n", sf.Params[0], sf.Params[1], sf.Params[2], sf.Params[3]);
+		aDebugDump += aBuffer;
+		aDebugDump += "\r\n";
+#else
 		BYTE symbolBuffer[sizeof(IMAGEHLP_SYMBOL) + 512];
 		PIMAGEHLP_SYMBOL pSymbol = (PIMAGEHLP_SYMBOL)symbolBuffer;
 		pSymbol->SizeOfStruct = sizeof(symbolBuffer);
 		pSymbol->MaxNameLength = 512;
-			
+
 		DWORD symDisplacement = 0;  // Displacement of the input address,
 									// relative to the start of the symbol
-			
+
 		if (mSymGetSymFromAddr(GetCurrentProcess(), sf.AddrPC.Offset, &symDisplacement, pSymbol))
 		{
 			char aUDName[256];
-			mUnDecorateSymbolName(pSymbol->Name, aUDName, 256, 
-								 UNDNAME_NO_ALLOCATION_MODEL | UNDNAME_NO_ALLOCATION_LANGUAGE | 
-								 UNDNAME_NO_MS_THISTYPE | UNDNAME_NO_ACCESS_SPECIFIERS | 
-								 UNDNAME_NO_THISTYPE | UNDNAME_NO_MEMBER_TYPE | 
+			mUnDecorateSymbolName(pSymbol->Name, aUDName, 256,
+								 UNDNAME_NO_ALLOCATION_MODEL | UNDNAME_NO_ALLOCATION_LANGUAGE |
+								 UNDNAME_NO_MS_THISTYPE | UNDNAME_NO_ACCESS_SPECIFIERS |
+								 UNDNAME_NO_THISTYPE | UNDNAME_NO_MEMBER_TYPE |
 								 UNDNAME_NO_RETURN_UDT_MODEL | UNDNAME_NO_THROW_SIGNATURES |
 								 UNDNAME_NO_SPECIAL_SYMS);
-				
-			sprintf(aBuffer, "%08X %08X %hs+%X\r\n", 
+
+			sprintf(aBuffer, "%08X %08X %hs+%X\r\n",
 					sf.AddrFrame.Offset, sf.AddrPC.Offset, aUDName, symDisplacement);
 		}
 		else // No symbol found.  Print out the logical address instead.
 		{
-			char szModule[MAX_PATH];            
+			char szModule[MAX_PATH];
 			DWORD section = 0, offset = 0;
 
-			GetLogicalAddress((PVOID)sf.AddrPC.Offset, szModule, sizeof(szModule), section, offset);				
+			GetLogicalAddress(reinterpret_cast<PVOID>(sf.AddrPC.Offset), szModule, sizeof(szModule), section, offset);
 			sprintf(aBuffer, "%08X %08X %04X:%08X %s\r\n", sf.AddrFrame.Offset, sf.AddrPC.Offset, section, offset, GetFilename(szModule).c_str());
 		}
 		aDebugDump += aBuffer;
-		
 		sprintf(aBuffer, "Params: %08X %08X %08X %08X\r\n", sf.Params[0], sf.Params[1], sf.Params[2], sf.Params[3]);
-		aDebugDump += aBuffer;		
+		aDebugDump += aBuffer;
 		aDebugDump += "\r\n";
+#endif
+
 
 		aLevelCount++;
-    
+
         // check for loop
         if (aLevelCount > 1000)
             break;
@@ -606,7 +678,7 @@ bool SEHCatcher::GetLogicalAddress(void* addr, char* szModule, DWORD len, DWORD&
     if (!VirtualQuery(addr, &mbi, sizeof(mbi)))
         return false;
 
-    DWORD hMod = (DWORD)mbi.AllocationBase;
+    DWORD_PTR hMod = reinterpret_cast<DWORD_PTR>(mbi.AllocationBase);
 
     if (!GetModuleFileNameA((HMODULE) hMod, szModule, len))
         return false;
@@ -619,7 +691,7 @@ bool SEHCatcher::GetLogicalAddress(void* addr, char* szModule, DWORD len, DWORD&
 
     PIMAGE_SECTION_HEADER pSection = IMAGE_FIRST_SECTION(pNtHdr);
 
-    DWORD rva = (DWORD) addr - hMod; // RVA is offset from module load address
+    DWORD rva = (DWORD)(((DWORD_PTR)addr - hMod)); // RVA is offset from module load address
 
     // Iterate through the section table, looking for the one that encompasses
     // the linear address.
@@ -645,7 +717,7 @@ bool SEHCatcher::GetLogicalAddress(void* addr, char* szModule, DWORD len, DWORD&
 
 std::string SEHCatcher::GetFilename(const std::string& thePath)
 {
-	int aLastSlash = max((int) thePath.rfind('\\'), (int) thePath.rfind('/'));	
+	int aLastSlash = max((int) thePath.rfind('\\'), (int) thePath.rfind('/'));
 
 	if (aLastSlash >= 0)
 	{
@@ -661,7 +733,7 @@ int aCount = 0;
 static LRESULT CALLBACK SEHProgressWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg)
-	{		
+	{
 	case WM_COMMAND:
 		{
 			HWND hwndCtl = (HWND) lParam;
@@ -689,7 +761,7 @@ static LRESULT CALLBACK SEHProgressWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 					{
 						SEHCatcher::mSubmitReportTransfer.Reset();
 
-						if (::MessageBoxW(hWnd, SEHCatcher::mSubmitErrorMessage.c_str(), 
+						if (::MessageBoxW(hWnd, SEHCatcher::mSubmitErrorMessage.c_str(),
 							L"Connection Failed", MB_RETRYCANCEL | MB_APPLMODAL) == IDRETRY)
 						{
 							_beginthread(SEHCatcher::SubmitReportThread, 0, 0);
@@ -708,7 +780,7 @@ static LRESULT CALLBACK SEHProgressWindowProc(HWND hWnd, UINT uMsg, WPARAM wPara
 
 				for (int i = 0; i < (aCount % 10); i++)
 					aNewString += " .";
-				
+
 				SetWindowTextA(gEditWindow, aNewString.c_str());
 			}
 		}
@@ -730,7 +802,7 @@ static void CreateProgressWindow()
 	wc.hInstance = gHInstance;
 	wc.lpfnWndProc = SEHProgressWindowProc;
 	wc.lpszClassName = "SEHProgressWindow";
-	wc.lpszMenuName = NULL;	
+	wc.lpszMenuName = NULL;
 	RegisterClassA(&wc);
 
 	RECT aRect;
@@ -746,7 +818,7 @@ static void CreateProgressWindow()
 	HWND aHWnd = CreateWindowA("SEHProgressWindow", "Submitting Report",
 		aWindowStyle,
 		64, 64,
-		aRect.right - aRect.left, 
+		aRect.right - aRect.left,
 		aRect.bottom - aRect.top,
 		NULL,
 		NULL,
@@ -759,22 +831,22 @@ static void CreateProgressWindow()
 	// Every second we should change the edit text
 	SetTimer(aHWnd, 1, 1000, NULL);
 
-	gEditWindow = CreateWindowA("EDIT", 
+	gEditWindow = CreateWindowA("EDIT",
 		"Please Wait",
-				
-		WS_VISIBLE | WS_CHILD | ES_READONLY, 
+
+		WS_VISIBLE | WS_CHILD | ES_READONLY,
 		24, 10,
 		240-8-8,
 		24,
 		aHWnd,
 		NULL,
 		gHInstance,
-		0);	
+		0);
 	if (!gUseDefaultFonts)
 		SendMessage(gEditWindow, WM_SETFONT, (WPARAM) SEHCatcher::mBoldFont, 0);
 
-	SEHCatcher::mNoButtonWindow = CreateWindowA("BUTTON", "Abort", 
-		WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_PUSHBUTTON, 
+	SEHCatcher::mNoButtonWindow = CreateWindowA("BUTTON", "Abort",
+		WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_PUSHBUTTON,
 		(240 - 96)/2, 64 - 22 - 6,
 		96,
 		22,
@@ -801,7 +873,7 @@ LRESULT CALLBACK SEHCatcher::SEHWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
 				ShowWindow(hWnd, SW_HIDE);
 
 				ShowSubmitInfoDialog();
-			}			
+			}
 			else if (hwndCtl == mNoButtonWindow)
 			{
 				mExiting = true;
@@ -824,7 +896,7 @@ LRESULT CALLBACK SEHCatcher::SEHWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, 
 LRESULT CALLBACK SEHCatcher::SubmitInfoWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg)
-	{		
+	{
 	case WM_COMMAND:
 		{
 			HWND hwndCtl = (HWND) lParam;
@@ -863,7 +935,7 @@ void SEHCatcher::WriteToFile(const std::string& theErrorText)
 void SEHCatcher::SubmitReportThread(void *theArg)
 {
 	std::string aSeperator = "---------------------------7d3e1f30eec";
-	
+
 	DefinesMap aSEHWebParams;
 
 	mApp->GetSEHWebParams(&aSEHWebParams);
@@ -874,42 +946,42 @@ void SEHCatcher::SubmitReportThread(void *theArg)
 	while (anItr != aSEHWebParams.end())
 	{
 		aContent += "--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"" + anItr->first + "\"\r\n" +		
+		"Content-Disposition: form-data; name=\"" + anItr->first + "\"\r\n" +
 		"\r\n" +
 		anItr->second + "\r\n";
-		
+
 		++anItr;
 	}
 
-	aContent += 
-		
+	aContent +=
+
 		/*"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"username\"\r\n" +		
+		"Content-Disposition: form-data; name=\"username\"\r\n" +
 		"\r\n" +
 		mApp->mUserName + "\r\n" +	*/
 
 		"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"prod\"\r\n" +		
+		"Content-Disposition: form-data; name=\"prod\"\r\n" +
 		"\r\n" +
-		mApp->mProdName + "\r\n" +	
+		mApp->mProdName + "\r\n" +
 
 		"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"version\"\r\n" +		
+		"Content-Disposition: form-data; name=\"version\"\r\n" +
 		"\r\n" +
 		mApp->mProductVersion + "\r\n" +
 
 		/*"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"buildnum\"\r\n" +		
+		"Content-Disposition: form-data; name=\"buildnum\"\r\n" +
 		"\r\n" +
 		StrFormat("%d", mApp->mBuildNum) + "\r\n" +
 
 		"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"builddate\"\r\n" +		
+		"Content-Disposition: form-data; name=\"builddate\"\r\n" +
 		"\r\n" +
 		mApp->mBuildDate + "\r\n" +
 
 		"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"referid\"\r\n" +		
+		"Content-Disposition: form-data; name=\"referid\"\r\n" +
 		"\r\n" +
 		mApp->mReferId + "\r\n" +*/
 
@@ -919,12 +991,12 @@ void SEHCatcher::SubmitReportThread(void *theArg)
 		mUserText + "\r\n" +
 
 		"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"errortitle\"\r\n" +		
+		"Content-Disposition: form-data; name=\"errortitle\"\r\n" +
 		"\r\n" +
 		mErrorTitle + "\r\n" +
 
 		"--" + aSeperator + "\r\n"
-		"Content-Disposition: form-data; name=\"errortext\"\r\n" +		
+		"Content-Disposition: form-data; name=\"errortext\"\r\n" +
 		"\r\n" +
 		mErrorText + "\r\n";
 
@@ -933,21 +1005,21 @@ void SEHCatcher::SubmitReportThread(void *theArg)
 		Buffer aBuffer;
 		mApp->ReadBufferFromFile(mUploadFileName, &aBuffer, true);
 
-		aContent += 
+		aContent +=
 			"--" + aSeperator + "\r\n"
 			"Content-Disposition: form-data; name=\"demofile\"; filename=\"popcap.dmo\"\r\n" +
 			"Content-Type: application/octet-stream\r\n" +
-			"\r\n";		
+			"\r\n";
 
-		aContent.insert(aContent.end(), (char*) aBuffer.GetDataPtr(), (char*) aBuffer.GetDataPtr() + aBuffer.GetDataLen());			
-				
+		aContent.insert(aContent.end(), (char*) aBuffer.GetDataPtr(), (char*) aBuffer.GetDataPtr() + aBuffer.GetDataLen());
+
 		aContent += "\r\n";
 	}
 
 	aContent +=
 		"--" + aSeperator + "--\r\n";
 
-	std::string aSendString = 
+	std::string aSendString =
 		"POST /deluxe_error.php HTTP/1.1\r\n"
 		"Content-Type: multipart/form-data; boundary=" + aSeperator + "\r\n"
 		"User-Agent: Mozilla/4.0 (compatible; popcap)\r\n" +
@@ -955,7 +1027,7 @@ void SEHCatcher::SubmitReportThread(void *theArg)
 		"Content-Length: " + StrFormat("%d", aContent.length()) + "\r\n" +
 		"Connection: close\r\n" +
 		"\r\n" + aContent;
-	
+
 	mSubmitReportTransfer.SendRequestString(mSubmitHost, aSendString);
 }
 
@@ -971,7 +1043,7 @@ void SEHCatcher::ShowSubmitInfoDialog()
 	wc.hInstance = gHInstance;
 	wc.lpfnWndProc = SubmitInfoWindowProc;
 	wc.lpszClassName = "SubmitInfoWindow";
-	wc.lpszMenuName = NULL;	
+	wc.lpszMenuName = NULL;
 	RegisterClassA(&wc);
 
 	RECT aRect;
@@ -987,7 +1059,7 @@ void SEHCatcher::ShowSubmitInfoDialog()
 	HWND aHWnd = CreateWindowA("SubmitInfoWindow", "Error Details",
 		aWindowStyle,
 		64+16, 64+16,
-		aRect.right - aRect.left, 
+		aRect.right - aRect.left,
 		aRect.bottom - aRect.top,
 		NULL,
 		NULL,
@@ -995,8 +1067,8 @@ void SEHCatcher::ShowSubmitInfoDialog()
 		0);
 
 	HWND aLabelWindow = CreateWindowW(L"EDIT", mSubmitMessage.c_str(),
-				
-		WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_READONLY, 
+
+		WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_READONLY,
 		8, 8,
 		400-8-8,
 		84,
@@ -1015,15 +1087,15 @@ void SEHCatcher::ShowSubmitInfoDialog()
 	if (!gUseDefaultFonts)
 		SendMessage(aLabelWindow, WM_SETFONT, (WPARAM) aBoldArialFont, 0);
 
-	mEditWindow = CreateWindowA("EDIT", "", 
-		WS_VISIBLE | WS_CHILD | ES_MULTILINE | WS_BORDER | WS_VSCROLL, 
+	mEditWindow = CreateWindowA("EDIT", "",
+		WS_VISIBLE | WS_CHILD | ES_MULTILINE | WS_BORDER | WS_VSCROLL,
 		8, 300-168-24-8-8,
 		400-8-8,
 		168,
 		aHWnd,
 		NULL,
 		gHInstance,
-		0);	
+		0);
 
 	aDC = ::GetDC(mEditWindow);
 	aFontHeight = -MulDiv(8, 96, 72);
@@ -1043,8 +1115,8 @@ void SEHCatcher::ShowSubmitInfoDialog()
 	if (mApp == NULL)
 		aWindowStyle |= WS_DISABLED;
 
-	mYesButtonWindow = CreateWindowA("BUTTON", "Continue", 
-		aWindowStyle, 
+	mYesButtonWindow = CreateWindowA("BUTTON", "Continue",
+		aWindowStyle,
 		aCurX, 300-24-8,
 		aButtonWidth,
 		24,
@@ -1057,8 +1129,8 @@ void SEHCatcher::ShowSubmitInfoDialog()
 
 	aCurX += aButtonWidth+8;
 
-	mNoButtonWindow = CreateWindowA("BUTTON", "Abort", 
-		WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_PUSHBUTTON, 
+	mNoButtonWindow = CreateWindowA("BUTTON", "Abort",
+		WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_PUSHBUTTON,
 		aCurX, 300-24-8,
 		aButtonWidth,
 		24,
@@ -1079,7 +1151,7 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 	GetVersionEx(&aVersionInfo);
 
 	// Setting fonts on 98 causes weirdo crash things in GDI upon the second crash.
-	//  That's no good.	
+	//  That's no good.
 	gUseDefaultFonts = aVersionInfo.dwPlatformId != VER_PLATFORM_WIN32_NT;
 
 	int aHeight = -MulDiv(8, 96, 72);
@@ -1090,12 +1162,12 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 	aHeight = -MulDiv(10, 96, 72);
 	mBoldFont = ::CreateFontA(aHeight, 0, 0, 0, FW_BOLD, FALSE, FALSE,
 			false, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-			DEFAULT_PITCH | FF_DONTCARE, "Tahoma");	
+			DEFAULT_PITCH | FF_DONTCARE, "Tahoma");
 
 	::SetCursor(::LoadCursor(NULL, IDC_ARROW));
 
 	mErrorTitle = theErrorTitle;
-	mErrorText = theErrorText;	
+	mErrorText = theErrorText;
 
 
 	WNDCLASSA wc;
@@ -1108,7 +1180,7 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 	wc.hInstance = gHInstance;
 	wc.lpfnWndProc = SEHWindowProc;
 	wc.lpszClassName = "SEHWindow";
-	wc.lpszMenuName = NULL;	
+	wc.lpszMenuName = NULL;
 	RegisterClassA(&wc);
 
 	RECT aRect;
@@ -1124,16 +1196,16 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 	HWND aHWnd = CreateWindowW(L"SEHWindow", L"Fatal Error!",
 		aWindowStyle,
 		64, 64,
-		aRect.right - aRect.left, 
+		aRect.right - aRect.left,
 		aRect.bottom - aRect.top,
 		NULL,
 		NULL,
 		gHInstance,
 		0);
 
-	HWND aLabelWindow = CreateWindowW(L"EDIT", 
+	HWND aLabelWindow = CreateWindowW(L"EDIT",
 		mCrashMessage.c_str(),
-		WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_READONLY, 
+		WS_VISIBLE | WS_CHILD | ES_MULTILINE | ES_READONLY,
 		8, 8,
 		400-8-8,
 		84,
@@ -1141,26 +1213,26 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 		NULL,
 		gHInstance,
 		0);
-	
-	int aFontHeight = -MulDiv(9, 96, 72);	
+
+	int aFontHeight = -MulDiv(9, 96, 72);
 	HFONT aBoldArialFont = CreateFontA(aFontHeight, 0, 0, 0, FW_BOLD, 0, 0,
 			false, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 			DEFAULT_PITCH | FF_DONTCARE, "Arial");
 
 	if (!gUseDefaultFonts)
-		SendMessage(aLabelWindow, WM_SETFONT, (WPARAM) aBoldArialFont, 0);		
+		SendMessage(aLabelWindow, WM_SETFONT, (WPARAM) aBoldArialFont, 0);
 
-	HWND anEditWindow = CreateWindowA("EDIT", theErrorText.c_str(), 
-		WS_VISIBLE | WS_CHILD | ES_MULTILINE | WS_BORDER | WS_VSCROLL | ES_READONLY, 
+	HWND anEditWindow = CreateWindowA("EDIT", theErrorText.c_str(),
+		WS_VISIBLE | WS_CHILD | ES_MULTILINE | WS_BORDER | WS_VSCROLL | ES_READONLY,
 		8, 300-168-24-8-8,
 		400-8-8,
 		168,
 		aHWnd,
 		NULL,
 		gHInstance,
-		0);	
-	
-	aFontHeight = -MulDiv(8, 96, 72);	
+		0);
+
+	aFontHeight = -MulDiv(8, 96, 72);
 	HFONT aCourierNewFont = CreateFontA(aFontHeight, 0, 0, 0, FW_NORMAL, 0, 0,
 			false, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 			DEFAULT_PITCH | FF_DONTCARE, "Courier New");
@@ -1178,17 +1250,17 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 	bool doDebugButton = false;
 #endif
 
-	bool canSubmit = mAllowSubmit && !mSubmitHost.empty();	
+	bool canSubmit = mAllowSubmit && !mSubmitHost.empty();
 	int aNumButtons = 1 + (doDebugButton ? 1 : 0) + (canSubmit ? 1 : 0);
-	
-	int aButtonWidth = (400 - 8 - 8 - (aNumButtons - 1)*8) / aNumButtons;		
-		
+
+	int aButtonWidth = (400 - 8 - 8 - (aNumButtons - 1)*8) / aNumButtons;
+
 	int aCurX = 8;
 
 	if (canSubmit)
 	{
-		mYesButtonWindow = CreateWindowA("BUTTON", "Send Report", 
-			aWindowStyle, 
+		mYesButtonWindow = CreateWindowA("BUTTON", "Send Report",
+			aWindowStyle,
 			aCurX, 300-24-8,
 			aButtonWidth,
 			24,
@@ -1199,28 +1271,28 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 		if (!gUseDefaultFonts)
 			SendMessage(mYesButtonWindow, WM_SETFONT, (WPARAM) aBoldArialFont, 0);
 
-		aCurX += aButtonWidth + 8;	
+		aCurX += aButtonWidth + 8;
 	}
 
 	if (doDebugButton)
 	{
-		mDebugButtonWindow = CreateWindowA("BUTTON", "Debug", 
-			aWindowStyle, 
+		mDebugButtonWindow = CreateWindowA("BUTTON", "Debug",
+			aWindowStyle,
 			aCurX, 300-24-8,
 			aButtonWidth,
 			24,
 			aHWnd,
 			NULL,
 			gHInstance,
-			0);		
+			0);
 		if (!gUseDefaultFonts)
-			SendMessage(mDebugButtonWindow, WM_SETFONT, (WPARAM) aBoldArialFont, 0);		
+			SendMessage(mDebugButtonWindow, WM_SETFONT, (WPARAM) aBoldArialFont, 0);
 
 		aCurX += aButtonWidth + 8;
 	}
 
-	mNoButtonWindow = CreateWindowA("BUTTON", "Close Now", 
-		WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_PUSHBUTTON, 
+	mNoButtonWindow = CreateWindowA("BUTTON", "Close Now",
+		WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_PUSHBUTTON,
 		aCurX, 300-24-8,
 		aButtonWidth,
 		24,
@@ -1239,7 +1311,7 @@ void SEHCatcher::ShowErrorDialog(const std::string& theErrorTitle, const std::st
 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
-	}	
+	}
 
 	DestroyWindow(aHWnd);
 
@@ -1255,7 +1327,7 @@ std::string SEHCatcher::GetSysInfo()
 
 	OSVERSIONINFOA aVersionInfo;
 	aVersionInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-	GetVersionExA(&aVersionInfo); 
+	GetVersionExA(&aVersionInfo);
 
 	aDebugDump += "Windows Ver: ";
 	if (aVersionInfo.dwPlatformId == VER_PLATFORM_WIN32_NT)
@@ -1282,7 +1354,7 @@ std::string SEHCatcher::GetSysInfo()
 		aMod = LoadLibraryA("ddraw.dll");
 		if (aMod != NULL)
 		{
-			GetModuleFileNameA(aMod, aPath, 256);			
+			GetModuleFileNameA(aMod, aPath, 256);
 			aDebugDump += "DDraw Ver: " + mApp->GetProductVersion(aPath) + "\r\n";
 			FreeLibrary(aMod);
 		}
@@ -1290,12 +1362,12 @@ std::string SEHCatcher::GetSysInfo()
 		aMod = LoadLibraryA("dsound.dll");
 		if (aMod != NULL)
 		{
-			GetModuleFileNameA(aMod, aPath, 256);			
+			GetModuleFileNameA(aMod, aPath, 256);
 			aDebugDump += "DSound Ver: " + mApp->GetProductVersion(aPath) + "\r\n";
 			FreeLibrary(aMod);
 		}
-	}	
+	}
 
 	return aDebugDump;
-}	
+}
 

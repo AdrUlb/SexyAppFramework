@@ -2883,8 +2883,18 @@ void DDImage::StretchBlt(Image* theImage, const Rect& theDestRectOrig, const Rec
 			if (aSrcDDImage->mHasTrans)
 				aFlags |= DDBLT_KEYSRC;
 
-			RECT aDestRect = {theDestRect.mX, theDestRect.mY, theDestRect.mX + theDestRect.mWidth, theDestRect.mY + theDestRect.mHeight};
-			RECT aSrcRect = {theSrcRect.mX, theSrcRect.mY, theSrcRect.mX + theSrcRect.mWidth, theSrcRect.mY + theSrcRect.mHeight};	
+			RECT aDestRect = {
+				static_cast<LONG>(theDestRect.mX),
+				static_cast<LONG>(theDestRect.mY),
+				static_cast<LONG>(theDestRect.mX + theDestRect.mWidth),
+				static_cast<LONG>(theDestRect.mY + theDestRect.mHeight)
+			};
+			RECT aSrcRect = {
+				static_cast<LONG>(theSrcRect.mX),
+				static_cast<LONG>(theSrcRect.mY),
+				static_cast<LONG>(theSrcRect.mX + theSrcRect.mWidth),
+				static_cast<LONG>(theSrcRect.mY + theSrcRect.mHeight)
+			};
 			
 			if (mLockCount > 0)
 			{

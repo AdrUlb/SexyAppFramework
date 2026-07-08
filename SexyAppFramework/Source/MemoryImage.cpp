@@ -1493,8 +1493,8 @@ bool MemoryImage::BltRotatedClipHelper(float &theX, float &theY, const Rect &the
 	float aSin = sinf(theRot);
 
 	// Map the four corners and find the bounding rectangle
-	float px[4] = { 0, theSrcRect.mWidth, theSrcRect.mWidth, 0 };
-	float py[4] = { 0, 0, theSrcRect.mHeight, theSrcRect.mHeight };
+	float px[4] = { 0.0f, static_cast<float>(theSrcRect.mWidth), static_cast<float>(theSrcRect.mWidth), 0 };
+	float py[4] = { 0.0f, 0.0f, static_cast<float>(theSrcRect.mHeight), static_cast<float>(theSrcRect.mHeight) };
 	float aMinX = 10000000;
 	float aMaxX = -10000000;
 	float aMinY = 10000000;
@@ -1759,20 +1759,20 @@ void MemoryImage::BltMatrixHelper(Image* theImage, float x, float y, const SexyM
 	if (anImage==NULL)
 		return;
  
-	float w2 = theSrcRect.mWidth/2.0f;
-	float h2 = theSrcRect.mHeight/2.0f;
+	float w2 = static_cast<float>(theSrcRect.mWidth)/2.0f;
+	float h2 = static_cast<float>(theSrcRect.mHeight)/2.0f;
 
-	float u0 = (float)theSrcRect.mX/theImage->mWidth;
-	float u1 = (float)(theSrcRect.mX + theSrcRect.mWidth)/theImage->mWidth;
-	float v0 = (float)theSrcRect.mY/theImage->mHeight;
-	float v1 = (float)(theSrcRect.mY + theSrcRect.mHeight)/theImage->mHeight;
+	float u0 = static_cast<float>(theSrcRect.mX)/static_cast<float>(theImage->mWidth);
+	float u1 = static_cast<float>(theSrcRect.mX + theSrcRect.mWidth)/static_cast<float>(theImage->mWidth);
+	float v0 = static_cast<float>(theSrcRect.mY)/static_cast<float>(theImage->mHeight);
+	float v1 = static_cast<float>(theSrcRect.mY + theSrcRect.mHeight)/static_cast<float>(theImage->mHeight);
 
 	SWHelper::XYZStruct aVerts[4] =
 	{
-		{ -w2,	-h2,	u0, v0, 0xFFFFFFFF },
-		{ w2,	-h2,	u1,	v0,	0xFFFFFFFF },
-		{ -w2,	h2,		u0,	v1,	0xFFFFFFFF },
-		{ w2,	h2,		u1,	v1,	0xFFFFFFFF }
+		{ -w2,	-h2,	u0, v0, -1 },
+		{ w2,	-h2,	u1,	v0,	-1 },
+		{ -w2,	h2,		u0,	v1,	-1 },
+		{ w2,	h2,		u1,	v1,	-1 }
 	};
 
 	for (int i=0; i<4; i++)

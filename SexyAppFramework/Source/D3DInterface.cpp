@@ -44,7 +44,7 @@ static void DisplayError(HRESULT theError, const char *theMsg)
 		if (aResult==IDABORT)
 			exit(0);
 		else if (aResult==IDRETRY)
-			_asm int 3;
+			__debugbreak();
 	}
 }
 
@@ -2127,7 +2127,7 @@ void D3DInterface::FillPoly(const Point theVertices[], int theNumVertices, const
 	VertexList aList;
 	for (int i=0; i<theNumVertices; i++)
 	{
-		D3DTLVERTEX vert = 	{ theVertices[i].mX + tx, theVertices[i].mY + ty,	0,	1,	aColor,	0,	0,		0 };
+		D3DTLVERTEX vert = 	{ static_cast<float>(theVertices[i].mX + tx), static_cast<float>(theVertices[i].mY + ty),	0,	1,	aColor,	0,	0,		0 };
 		if (!mTransformStack.empty())
 		{
 			SexyVector2 v(vert.sx,vert.sy);

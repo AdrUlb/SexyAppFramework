@@ -437,7 +437,7 @@ SexyAppBase::~SexyAppBase()
 	{
 		HWND aWindow = mInvisHWnd;
 		mInvisHWnd = NULL;
-		SetWindowLong(aWindow, GWL_USERDATA, NULL);
+		SetWindowLongPtr(aWindow, GWLP_USERDATA, NULL);
 		DestroyWindow(aWindow);
 	}	
 	
@@ -464,7 +464,7 @@ SexyAppBase::~SexyAppBase()
 		HWND aWindow = mHWnd;
 		mHWnd = NULL;
 		
-		SetWindowLong(aWindow, GWL_USERDATA, NULL);
+		SetWindowLongPtr(aWindow, GWLP_USERDATA, NULL);
 
 		/*char aStr[256];
 		sprintf(aStr, "HWND: %d\r\n", aWindow);
@@ -3349,7 +3349,7 @@ LRESULT CALLBACK SexyAppBase::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
 			return aResult;
 	}
 
-	SexyAppBase* aSexyApp = (SexyAppBase*) GetWindowLong(hWnd, GWL_USERDATA);	
+	SexyAppBase* aSexyApp = (SexyAppBase*) GetWindowLongPtr(hWnd, GWLP_USERDATA);
 	switch (uMsg)
 	{		
 //  TODO: switch to killfocus/setfocus?
@@ -3693,7 +3693,7 @@ LRESULT CALLBACK SexyAppBase::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
 	case WM_DESTROY:
 		{
 			char aStr[256];
-			sprintf(aStr, "DESTROYED HWND: %d\r\n", hWnd);
+			sprintf(aStr, "DESTROYED HWND: %p\r\n", hWnd);
 			OutputDebugStringA(aStr);
 		}
 		break;	
@@ -4655,7 +4655,7 @@ void SexyAppBase::MakeWindow()
 
 	if (mHWnd != NULL)
 	{
-		SetWindowLong(mHWnd, GWL_USERDATA, NULL);
+		SetWindowLongPtr(mHWnd, GWLP_USERDATA, NULL);
 		HWND anOldWindow = mHWnd;
 		mHWnd = NULL;		
 		DestroyWindow(anOldWindow);	
@@ -4792,7 +4792,7 @@ void SexyAppBase::MakeWindow()
 	sprintf(aStr, "HWND: %d\r\n", mHWnd);
 	OutputDebugString(aStr);*/
 
-	SetWindowLong(mHWnd, GWL_USERDATA, (LONG) this);	
+	SetWindowLongPtr(mHWnd, GWLP_USERDATA, (LONG) this);
 
 	if (mDDInterface == NULL)
 	{
@@ -6208,7 +6208,7 @@ void SexyAppBase::Init()
 				NULL,
 				gHInstance,
 				0);	
-		SetWindowLong(mInvisHWnd, GWL_USERDATA, (LONG) this);
+		SetWindowLongPtr(mInvisHWnd, GWLP_USERDATA, (LONG) this);
 	}
 	else
 	{
@@ -6254,7 +6254,7 @@ void SexyAppBase::Init()
 				NULL,
 				gHInstance,
 				0);	
-		SetWindowLong(mInvisHWnd, GWL_USERDATA, (LONG) this);
+		SetWindowLongPtr(mInvisHWnd, GWLP_USERDATA, (LONG) this);
 	}
 		
 	mHandCursor = CreateCursor(gHInstance, 11, 4, 32, 32, gFingerCursorData, gFingerCursorData+sizeof(gFingerCursorData)/2); 

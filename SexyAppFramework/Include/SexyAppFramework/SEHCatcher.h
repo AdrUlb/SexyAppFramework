@@ -3,31 +3,29 @@
 
 #include "Common.h"
 #include "HTTPTransfer.h"
-#include <imagehlp.h>
+#include <dbghelp.h>
 
 namespace Sexy
 {
 
 class SexyAppBase;
 
-typedef BOOL (__stdcall * SYMINITIALIZEPROC)(HANDLE, LPSTR, BOOL);
-
+typedef BOOL (__stdcall *SYMINITIALIZEPROC)(HANDLE, LPSTR, BOOL);
 typedef DWORD (__stdcall *SYMSETOPTIONSPROC)(DWORD);
-
 typedef BOOL (__stdcall *SYMCLEANUPPROC)(HANDLE);
-
 typedef LPCSTR (__stdcall *UNDECORATESYMBOLNAMEPROC)(LPCSTR, LPSTR, DWORD, DWORD);
 
-typedef BOOL (__stdcall * STACKWALKPROC)
-           ( DWORD, HANDLE, HANDLE, LPSTACKFRAME, LPVOID,
-            PREAD_PROCESS_MEMORY_ROUTINE,PFUNCTION_TABLE_ACCESS_ROUTINE,
-            PGET_MODULE_BASE_ROUTINE, PTRANSLATE_ADDRESS_ROUTINE);
-
+#if defined(_WIN64)
+typedef BOOL (__stdcall *STACKWALK64PROC)( DWORD, HANDLE, HANDLE, LPSTACKFRAME64, LPVOID, PREAD_PROCESS_MEMORY_ROUTINE64,PFUNCTION_TABLE_ACCESS_ROUTINE64, PGET_MODULE_BASE_ROUTINE64, PTRANSLATE_ADDRESS_ROUTINE64);
+typedef LPVOID (__stdcall *SYMFUNCTIONTABLEACCESS64PROC)(HANDLE, DWORD64);
+typedef DWORD64 (__stdcall *SYMGETMODULEBASE64PROC)(HANDLE, DWORD64);
+typedef BOOL (__stdcall *SYMFROMADDRPROC)(HANDLE, DWORD64, PDWORD64, PSYMBOL_INFO);
+#else
+typedef BOOL (__stdcall *STACKWALKPROC)( DWORD, HANDLE, HANDLE, LPSTACKFRAME, LPVOID, PREAD_PROCESS_MEMORY_ROUTINE,PFUNCTION_TABLE_ACCESS_ROUTINE, PGET_MODULE_BASE_ROUTINE, PTRANSLATE_ADDRESS_ROUTINE);
 typedef LPVOID (__stdcall *SYMFUNCTIONTABLEACCESSPROC)(HANDLE, DWORD);
-
 typedef DWORD (__stdcall *SYMGETMODULEBASEPROC)(HANDLE, DWORD);
-
 typedef BOOL (__stdcall *SYMGETSYMFROMADDRPROC)(HANDLE, DWORD, PDWORD, PIMAGEHLP_SYMBOL);
+#endif
 
 class SEHCatcher 
 {
@@ -54,10 +52,17 @@ public:
 	static SYMSETOPTIONSPROC mSymSetOptions;
 	static UNDECORATESYMBOLNAMEPROC mUnDecorateSymbolName;
 	static SYMCLEANUPPROC	mSymCleanup;
+#if defined(_WIN64)
+	static STACKWALK64PROC	mStackWalk;
+	static SYMFUNCTIONTABLEACCESS64PROC mSymFunctionTableAccess;
+	static SYMGETMODULEBASE64PROC mSymGetModuleBase;
+	static SYMFROMADDRPROC mSymGetSymFromAddr;
+#else
 	static STACKWALKPROC	mStackWalk;
 	static SYMFUNCTIONTABLEACCESSPROC mSymFunctionTableAccess;
 	static SYMGETMODULEBASEPROC mSymGetModuleBase;
 	static SYMGETSYMFROMADDRPROC mSymGetSymFromAddr;
+#endif
 	static HTTPTransfer		mSubmitReportTransfer;
 	static bool				mExiting;
 	static bool				mShowUI;
@@ -80,7 +85,7 @@ public:
 	static void				ShowErrorDialog(const std::string& theErrorTitle, const std::string& theErrorText);	
 	static bool				LoadImageHelp();
 	static void				UnloadImageHelp();
-	static std::string		IntelWalk(PCONTEXT theContext, int theSkipCount);
+//	static std::string		IntelWalk(PCONTEXT theContext, int theSkipCount);
 	static std::string		ImageHelpWalk(PCONTEXT theContext, int theSkipCount);
 	static std::string		GetSysInfo();
 	static void				GetSymbolsFromMapFile(std::string &theDebugDump);
